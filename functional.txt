@@ -1,0 +1,8 @@
+{...}                                  // scope
+[captures] {...}                       // capturing scope (closure)
+(args) {...}                           // anonymous procedure
+(args) [captures] {...}                // capturing anonymous procedure
+(args) : return_type {...}             // anonymous function (pure lambda)
+(args) : return_type [captures] {...}  // capturing anonymous function (lambda)
+func (args) : return_type {...}        // function
+func (args) {...}                      // procedure

@@ -1,0 +1,15 @@
+-variable redeclaration even in sub-scopes is an error
+-no implicit copies
+
+main () : int
+{
+  x: int = 0;
+  y: int = 2;
+
+  //scope captures
+  [x] {
+    ++x; //ok
+    ++y; //error: variable "y" is not available in this scope
+  }
+}
+
