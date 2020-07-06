@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <deque>
+#include <unordered_map>
 #include <unordered_set>
 #include <variant>
 
@@ -11,21 +12,14 @@
 constexpr int FAILURE = -1;
 constexpr int SUCCESS =  0;
 
-enum token_punctuation
+enum operation
 {
-  paren_l,
-  paren_r,
-  bracket_l,
-  bracket_r,
-  semicolon,
-  colon,
-};
-
-enum token_operator_unary
-{
-  negate,
+  minus,
   ones_complement,
   boolean_negate,
+  plus,
+  multiply,
+  divide
 };
 
 // todo: big string pool thing
@@ -35,143 +29,82 @@ std::unordered_set<std::string> keywords =
   "return"
 };
 
+using punctuation = char;
+std::unordered_map<std::string, operation> operations =
+{
+  {"-", minus},
+  {"+", plus},
+  {"~", ones_complement},
+  {"!", boolean_negate},
+  {"*", multiply},
+  {"/", divide}
+};
+
 // todo: this becomes an index into string pool
 struct keyword
 {
   std::string name;
 };
 
-using token = std::variant<keyword, std::string, int, token_punctuation, token_operator_unary>;
+using token = std::variant<keyword, std::string, int, punctuation, operation>;
 
 template <typename T0, typename ... Ts>
 std::ostream & operator<< (std::ostream & s,
                            std::variant<T0, Ts...> const & v)
  { std::visit([&](auto && arg){ s << arg;}, v); return s; }
 
-std::deque<token> tokenize_chunk(std::string const& chunk)
+std::deque<token> tokenize_chunk_regex(std::string const& chunk)
 {
   std::deque<token> tokens;
+  re2::StringPiece input(chunk);
+  std::stringstream capture_groups;
+  capture_groups << "(?P<keyword>return|int)" << "|";
+  capture_groups << "(?P<identifier>[[:alpha:]]+)" << "|";
+  capture_groups << "(?P<literal>[[:digit:]]+)" << "|";
+  capture_groups << "(?P<operator_2char>!=)" << "|";
+  capture_groups << "(?P<operator_1char>[~!\\+\\-\\*\\/])" << "|";
+  capture_groups << "(?P<punctuation>[(){};:])"; // << "|";
+  re2::RE2 expr(capture_groups.str());
+  std::string keyword;
+  std::string identifier;
+  std::string literal;
+  std::string op_2;
+  std::string op_1;
+  std::string punctuation;
 
-  enum tokenizer_state
+  while(!input.empty() && RE2::Consume(&input, expr, &keyword, &identifier, &literal, &op_2, &op_1, &punctuation))
   {
-    in_none,
-    in_text,
-    in_number,
-  } state = in_none;
-
-  auto classify_character = []
-  (char c) -> tokenizer_state
-  {
-    if (isdigit(c))
+    if (!keyword.empty())
     {
-      return in_number;
+      std::cout << "found a keyword: " << keyword << std::endl;
+      tokens.emplace_back(token{ ::keyword{keyword} });
     }
-    if (isalpha(c))
+    else if (!identifier.empty())
     {
-      return in_text;
+      std::cout << "found an identifier: " << identifier << std::endl;
+      tokens.emplace_back(token{ identifier });
     }
-    return in_none;
-  };
-
-  auto get_single = []
-  (char c) -> std::variant<token_punctuation, token_operator_unary>
-  {
-    switch (c)
+    else if (!literal.empty())
     {
-      /* punctuation */
-      case '(': return paren_l;
-      case ')': return paren_r;
-      case '{': return bracket_l;
-      case '}': return bracket_r;
-      case ';': return semicolon;
-      case ':': return colon;
-
-      /* unary operators */
-      case '-': return negate;
-      case '~': return ones_complement;
-      case '!': return boolean_negate;
+      std::cout << "found a constant: " << literal << std::endl;
+      tokens.emplace_back(token{ std::in_place_type_t<int>{}, std::stoi(literal) });
     }
-  };
-
-  auto add_text = [&tokens]
-  (std::string && s)
-  {
-    if (keywords.find(s) != keywords.end())
+    else if (!op_2.empty())
     {
-      tokens.emplace_back(token{keyword{s}});
-      return;
+      std::cout << "found a 2-char operator: " << op_2 << std::endl;
+      tokens.emplace_back(token{ std::in_place_type_t<operation>{}, ::operation{operations[op_2]} });
     }
-    tokens.emplace_back(token{s});
-  };
-
-  auto add_number = [&tokens]
-  (std::string && s)
-  {
-    tokens.emplace_back(token{std::stoi(s)});
-  };
-
-  decltype(chunk.begin()) token_begin;
-  for (auto c = chunk.begin(); c != chunk.end(); ++c)
-  {
-    switch (state)
+    else if (!op_1.empty())
     {
-      case in_none:
-      {
-        if (isspace(*c))
-        {
-          continue;
-        }
-        tokenizer_state new_state = classify_character(*c);
-        if (new_state != in_none)
-        {
-          state = new_state;
-          token_begin = c;
-          continue;
-        }
-        auto single = get_single(*c);
-        if (std::holds_alternative<token_operator_unary>(single))
-        {
-          tokens.emplace_back(token{std::get<token_operator_unary>(single)});
-        }
-        else if (std::holds_alternative<token_punctuation>(single))
-        {
-          tokens.emplace_back(token{ std::get<token_punctuation>(single) });
-        }
-      } break;
-      case in_text:
-      {
-        tokenizer_state new_state = classify_character(*c);
-        if (new_state != in_text)
-        {
-          add_text(std::string{token_begin, c});
-          state = new_state;
-          --c;
-          continue;
-        }
-      } break;
-      case in_number:
-      {
-        tokenizer_state new_state = classify_character(*c);
-        if (new_state != in_number)
-        {
-          add_number(std::string{token_begin, c});
-          state = new_state;
-          --c;
-          continue;
-        }
-      } break;
+      std::cout << "found a 1-char operator: " << op_1 << std::endl;
+      tokens.emplace_back(token{ std::in_place_type_t<operation>{}, operation{operations[op_1]} });
+    }
+    else if (!punctuation.empty())
+    {
+      std::cout << "found punctuation: " << punctuation << std::endl;
+      tokens.emplace_back(token{ std::in_place_type_t<::punctuation>{}, ::punctuation{punctuation[0]} });
     }
   }
-  switch (state)
-  {
-    case in_text:
-      add_text(std::string{token_begin, chunk.end()});
-      break;
-    case in_number:
-      add_number(std::string{token_begin, chunk.end()});
-      break;
-  }
-
   return tokens;
 }
 
@@ -186,7 +119,7 @@ using expression = std::variant<unary_op*, constant*>;
 
 struct unary_op
 {
-  token_operator_unary op;
+  operation op;
   expression* exp;
 };
 
@@ -198,7 +131,7 @@ struct statement
 
 struct function
 {
-  // name of function
+  // TODO: index into string pool
   std::string m_name;
   // for now, functions can have only one statement
   statement* m_body;
@@ -218,11 +151,11 @@ expression* parse_expression(std::deque<token>& tokens)
   {
     return new expression{new constant{std::get<int>(piece)}};
   }
-  if (std::holds_alternative<token_operator_unary>(piece))
+  if (std::holds_alternative<operation>(piece))
   {
     return new expression{
       new unary_op{
-      std::get<token_operator_unary>(piece),
+      std::get<operation>(piece),
       parse_expression(tokens)
       }
     };
@@ -242,7 +175,7 @@ statement* parse_statement(std::deque<token>& tokens)
 
   token terminator = tokens.front();
   tokens.pop_front();
-  if (std::get<token_punctuation>(terminator) != semicolon)
+  if (std::get<punctuation>(terminator) != ';')
   {
     std::cerr << "Error: Missing semicolon after statement.\n";
   }
@@ -263,7 +196,7 @@ function* parse_function(std::deque<token>& tokens)
   {
   token param_list_open = tokens.front();
   tokens.pop_front();
-  if (std::get<token_punctuation>(param_list_open) != paren_l)
+  if (std::get<punctuation>(param_list_open) != '(')
   {
     std::cerr << "Error: Missing parameter list after function name.\n";
   }
@@ -273,7 +206,7 @@ function* parse_function(std::deque<token>& tokens)
   {
   token param_list_close = tokens.front();
   tokens.pop_front();
-  if (std::get<token_punctuation>(param_list_close) != paren_r)
+  if (std::get<punctuation>(param_list_close) != ')')
   {
     std::cerr << "Error: Unclosed parameter list after function name.\n";
   }
@@ -282,7 +215,7 @@ function* parse_function(std::deque<token>& tokens)
   {
   token return_type_separator = tokens.front();
   tokens.pop_front();
-  if (std::get<token_punctuation>(return_type_separator) != colon)
+  if (std::get<punctuation>(return_type_separator) != ':')
   {
     std::cerr << "Error: Unclosed parameter list after function name.\n";
   }
@@ -300,7 +233,7 @@ function* parse_function(std::deque<token>& tokens)
   {
   token body_open = tokens.front();
   tokens.pop_front();
-  if (std::get<token_punctuation>(body_open) != bracket_l)
+  if (std::get<punctuation>(body_open) != '{')
   {
     std::cerr << "Error: Missing '{' after function header.\n";
   }
@@ -311,7 +244,7 @@ function* parse_function(std::deque<token>& tokens)
   {
   token body_close = tokens.front();
   tokens.pop_front();
-  if (std::get<token_punctuation>(body_close) != bracket_r)
+  if (std::get<punctuation>(body_close) != '}')
   {
     std::cerr << "Error: Missing '}' after function body.\n";
   }
@@ -336,31 +269,44 @@ program* parse_program(std::deque<token>& tokens)
 
 int optimize_expression(expression& e)
 {
+  constexpr int is_constant = 1;
   if (std::holds_alternative<constant*>(e))
   {
-    return 1;
+    return is_constant;
   }
   else if (std::holds_alternative<unary_op*>(e))
   {
     unary_op* op = std::get<unary_op*>(e);
-    if (optimize_expression(*(op->exp)))
+    if (optimize_expression(*(op->exp)) == is_constant)
     {
       switch (op->op)
       {
         //todo: don't leak memory
-        case operation::negate:
-        e.emplace<constant*>(new constant{-(std::get<constant*>(*(op->exp)))->value});
-        return 1;
-        case operation::ones_complement:
-        e.emplace<constant*>(new constant{~(std::get<constant*>(*(op->exp)))->value});
-        return 1;
-        case operation::boolean_negate:
-        e.emplace<constant*>(new constant{!(std::get<constant*>(*(op->exp)))->value});
-        return 1;
+      case operation::minus:
+      {
+        auto* prev_constant = std::get<constant*>(*(op->exp));
+        e.emplace<constant*>(new constant{ -(prev_constant->value) });
+        delete prev_constant;
+        return is_constant;
+      }
+      case operation::ones_complement:
+      {
+        auto* prev_constant = std::get<constant*>(*(op->exp));
+        e.emplace<constant*>(new constant{ ~(std::get<constant*>(*(op->exp)))->value });
+        delete prev_constant;
+        return is_constant;
+      }
+      case operation::boolean_negate:
+      {
+        auto* prev_constant = std::get<constant*>(*(op->exp));
+        e.emplace<constant*>(new constant{ !(std::get<constant*>(*(op->exp)))->value });
+        delete prev_constant;
+        return is_constant;
+      }
       }
     }
   }
-  return 0;
+  return !is_constant;
 }
 
 void optimize_statement(statement& s)
@@ -385,7 +331,7 @@ void generate_unary_op(unary_op const& u, std::ostream& output)
   generate_expression(*u.exp, output);
   switch (u.op)
   {
-  case negate:
+  case minus:
     output << "neg eax\n";
     break;
   case ones_complement:
@@ -447,7 +393,8 @@ int main(int argc, char** argv)
     std::string chunk;
     while (input_file >> chunk)
     {
-      auto&& tokenized = tokenize_chunk(chunk);
+      auto&& tokenized = tokenize_chunk_regex(chunk);
+      //auto&& tokenized = tokenize_chunk(chunk);
       for (auto& token : tokenized)
       {
         tokens.emplace_back(token);
@@ -460,6 +407,11 @@ int main(int argc, char** argv)
 
   // AST optimization
   optimize_program(*p);
+  
+  // conversion into IR
+
+  // IR optimization
+
   // generate assembly output
   std::ofstream out_assembly{ "asm.s" };
   generate_program(*p, out_assembly);
