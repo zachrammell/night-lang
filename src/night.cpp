@@ -333,6 +333,50 @@ program* parse_program(std::deque<token>& tokens)
   return p;
 }
 
+int optimize_expression(expression& e)
+{
+  if (std::holds_alternative<constant*>(e))
+  {
+    return 1;
+  }
+  else if (std::holds_alternative<unary_op*>(e))
+  {
+    unary_op* op = std::get<unary_op*>(e);
+    if (optimize_expression(*(op->exp)))
+    {
+      switch (op->op)
+      {
+        //todo: don't leak memory
+        case operation::negate:
+        e.emplace<constant*>(new constant{-(std::get<constant*>(*(op->exp)))->value});
+        return 1;
+        case operation::ones_complement:
+        e.emplace<constant*>(new constant{~(std::get<constant*>(*(op->exp)))->value});
+        return 1;
+        case operation::boolean_negate:
+        e.emplace<constant*>(new constant{!(std::get<constant*>(*(op->exp)))->value});
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+void optimize_statement(statement& s)
+{
+  optimize_expression(*s.m_expression);
+}
+
+void optimize_function(function& f)
+{
+  optimize_statement(*f.m_body);
+}
+
+void optimize_program(program& p)
+{
+  optimize_function(*p.m_entry_point);
+}
+
 void generate_expression(expression const& e, std::ostream& output);
 
 void generate_unary_op(unary_op const& u, std::ostream& output)
@@ -410,8 +454,12 @@ int main(int argc, char** argv)
     }
   }
 
+  // parse tokens into AST
   program* p = parse_program(tokens);
 
+  // AST optimization
+  optimize_program(*p);
+  // generate assembly output
   std::ofstream out_assembly{ "asm.s" };
   generate_program(*p, out_assembly);
 
