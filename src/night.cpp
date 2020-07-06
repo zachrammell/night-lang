@@ -4,8 +4,9 @@
 #include <string>
 #include <deque>
 #include <unordered_set>
-#include <iterator>
 #include <variant>
+
+#include <re2/re2.h>
 
 constexpr int FAILURE = -1;
 constexpr int SUCCESS =  0;
