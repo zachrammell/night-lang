@@ -1,0 +1,9 @@
+/* ok check this out it's Lisp but in comments */
+/*defun fib /*n*/
+  /*check-type n /*integer 0 **/*/
+  /*if /*< n 2*/ n
+      /*+ /*fib /*1- n*/*/ /*fib /*- n 2*/*/*/*/*/
+main () : int
+{
+  return 0;
+}

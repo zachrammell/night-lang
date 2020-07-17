@@ -156,13 +156,16 @@ std::deque<token> tokenize_chunk(std::string const& chunk)
   re2::StringPiece input(chunk);
   // todo: automatic regex builder for keywords, operators.
   std::stringstream capture_groups;
+  // matches /* and */
+  capture_groups << "(?P<comment>" R"(\/\*|\*\/)" ")" << "|";
   capture_groups << "(?P<keyword>return|int)" << "|";
   capture_groups << "(?P<identifier>[[:alpha:]]+)" << "|";
   capture_groups << "(?P<constant>[[:digit:]]+)" << "|";
-  capture_groups << "(?P<operator_2char>&&|\\|\\|)" << "|";
-  capture_groups << "(?P<operator_1char>[~!\\+\\-\\*\\/])" << "|";
+  capture_groups << "(?P<operator_2char>" R"(&&|\|\|)" ")" << "|";
+  capture_groups << "(?P<operator_1char>" R"([~!\+\-\*\/])" ")" << "|";
   capture_groups << "(?P<punctuation>[(){};:])"; // << "|";
   re2::RE2 expr(capture_groups.str());
+  std::string comment;
   std::string keyword;
   std::string identifier;
   std::string constant;
@@ -170,9 +173,30 @@ std::deque<token> tokenize_chunk(std::string const& chunk)
   std::string op_1;
   std::string punc;
 
+  static size_t comment_depth = 0;
+
   while(!input.empty()
-    && RE2::Consume(&input, expr, &keyword, &identifier, &constant, &op_2, &op_1, &punc))
+    && RE2::Consume(&input, expr, &comment, &keyword, &identifier, &constant, &op_2, &op_1, &punc))
   {
+    // todo: do comments in a pre-pass? unless parsing them is useful for something
+    if (!comment.empty())
+    {
+      if (comment == "/*")
+      {
+        ++comment_depth;
+      }
+      else if (comment == "*/")
+      {
+        --comment_depth;
+      }
+    }
+
+    // discards everything while in a comment. could capture the text for something if needed
+    if (comment_depth > 0)
+    {
+      continue;
+    }
+
     unless (keyword.empty())
     {
       std::cout << "found a keyword: " << keyword << std::endl;

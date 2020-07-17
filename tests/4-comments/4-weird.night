@@ -1,0 +1,8 @@
+/* comments */
+main /* between */ ( /* every */ ) /* token */ : /* will */ int
+/* not */
+{
+  /* break */
+  return /* anything */ 2 /* if */ + /* I */ 2 /* did */; /* this */
+}
+/* correctly */
