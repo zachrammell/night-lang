@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="expression_node">
+    <DisplayString Condition="m_type == expression_node::expr_type::binary_op"> {m_binop} </DisplayString>
+    <DisplayString Condition="m_type == expression_node::expr_type::unary_op"> {m_unop} </DisplayString>
+    <DisplayString Condition="m_type == expression_node::expr_type::value"> {m_atom} </DisplayString>
+    <Expand>
+      <Item Name="Type">m_type</Item>
+      <Item Condition="m_type == expression_node::expr_type::binary_op" Name="Value">m_binop</Item>
+      <Item Condition="m_type == expression_node::expr_type::unary_op" Name="Value">m_unop</Item>
+      <Item Condition="m_type == expression_node::expr_type::value" Name="Value">m_atom</Item>
+    </Expand>
+  </Type> 
+</AutoVisualizer>
