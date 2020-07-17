@@ -10,374 +10,576 @@
 
 #include <re2/re2.h>
 
+#define until(exp) while(!(exp))
+#define unless(exp) if(!(exp))
+
 namespace fs = std::filesystem;
 
 constexpr int FAILURE = -1;
 constexpr int SUCCESS =  0;
 
-enum operation
+enum class operation_unary
 {
-  minus,
+  negate,
   ones_complement,
-  boolean_negate,
-  plus,
+  boolean_negate
+};
+
+enum class operation_binary
+{
+  add,
+  subtract,
   multiply,
   divide
 };
 
 // todo: big string pool thing
-std::unordered_set<std::string> keywords =
+std::unordered_set<std::string> const keywords =
 {
   "int",
   "return"
 };
 
-using punctuation = char;
-std::unordered_map<std::string, operation> operations =
+// todo: put into string pool.
+std::unordered_set<std::string> identifiers;
+
+std::unordered_set<std::string> const operators =
 {
-  {"-", minus},
-  {"+", plus},
-  {"~", ones_complement},
-  {"!", boolean_negate},
-  {"*", multiply},
-  {"/", divide}
+  "&&",
+  "||",
+  "+",
+  "-",
+  "*",
+  "/",
+  "!",
+  "~"
 };
+
+#pragma region Tokenizer
 
 // todo: this becomes an index into string pool
 struct keyword
 {
-  std::string name;
+  std::string_view name;
 };
 
-using token = std::variant<keyword, std::string, int, punctuation, operation>;
-
-template <typename T0, typename ... Ts>
-std::ostream & operator<< (std::ostream & s,
-                           std::variant<T0, Ts...> const & v)
- { std::visit([&](auto && arg){ s << arg;}, v); return s; }
-
-std::deque<token> tokenize_chunk_regex(std::string const& chunk)
+struct token
 {
+  enum class token_type
+  {
+    invalid,
+    operation,
+    keyword,
+    identifier,
+    punctuation,
+    constant
+  } m_type;
+
+  union
+  {
+    std::string_view m_operation;
+    keyword m_keyword;
+    std::string_view m_identifier;
+    char m_punctuation;
+    int m_constant;
+  };
+};
+
+bool operator==(token const& t1, token const& t2)
+{
+  if (t1.m_type != t2.m_type)
+  {
+    return false;
+  }
+
+  switch (t1.m_type)
+  {
+  case token::token_type::operation:
+    return t1.m_operation == t2.m_operation;
+  case token::token_type::keyword:
+    return t1.m_keyword.name == t2.m_keyword.name;
+  case token::token_type::identifier:
+    return t1.m_identifier == t2.m_identifier;
+  case token::token_type::punctuation:
+    return t1.m_punctuation == t2.m_punctuation;
+  case token::token_type::constant:
+    return t1.m_constant == t2.m_constant;
+  }
+
+  return false;
+}
+
+token create_token_operation(std::string const& op)
+{
+  token t = token{ token::token_type::operation };
+  t.m_operation = { operators.find(op)->data() };
+  return t;
+}
+
+token create_token_keyword(std::string const& keyword)
+{
+  token t = token{ token::token_type::keyword };
+  t.m_keyword = { keywords.find(keyword)->data() };
+  return t;
+}
+
+token create_token_identifier(std::string const& id)
+{
+  token t = token{ token::token_type::identifier };
+  auto stored_id = identifiers.find(id);
+  if (stored_id == identifiers.end())
+  {
+    stored_id = identifiers.insert(id).first;
+  }
+  t.m_identifier = { stored_id->data() };
+  return t;
+}
+
+token create_token_punctuation(char punc)
+{
+  token t = { token::token_type::punctuation };
+  t.m_punctuation = punc;
+  return t;
+}
+
+token create_token_constant(int i)
+{
+  token t = { token::token_type::constant };
+  t.m_constant = i;
+  return t;
+}
+
+std::deque<token> tokenize_chunk(std::string const& chunk)
+{
+  // todo: move initialization code like this out of the function
   std::deque<token> tokens;
   re2::StringPiece input(chunk);
+  // todo: automatic regex builder for keywords, operators.
   std::stringstream capture_groups;
   capture_groups << "(?P<keyword>return|int)" << "|";
   capture_groups << "(?P<identifier>[[:alpha:]]+)" << "|";
-  capture_groups << "(?P<literal>[[:digit:]]+)" << "|";
-  capture_groups << "(?P<operator_2char>!=)" << "|";
+  capture_groups << "(?P<constant>[[:digit:]]+)" << "|";
+  capture_groups << "(?P<operator_2char>&&|\\|\\|)" << "|";
   capture_groups << "(?P<operator_1char>[~!\\+\\-\\*\\/])" << "|";
   capture_groups << "(?P<punctuation>[(){};:])"; // << "|";
   re2::RE2 expr(capture_groups.str());
   std::string keyword;
   std::string identifier;
-  std::string literal;
+  std::string constant;
   std::string op_2;
   std::string op_1;
-  std::string punctuation;
+  std::string punc;
 
-  while(!input.empty() && RE2::Consume(&input, expr, &keyword, &identifier, &literal, &op_2, &op_1, &punctuation))
+  while(!input.empty()
+    && RE2::Consume(&input, expr, &keyword, &identifier, &constant, &op_2, &op_1, &punc))
   {
-    if (!keyword.empty())
+    unless (keyword.empty())
     {
       std::cout << "found a keyword: " << keyword << std::endl;
-      tokens.emplace_back(token{ ::keyword{keyword} });
+      tokens.emplace_back(create_token_keyword(keyword));
     }
-    else if (!identifier.empty())
+    else unless (identifier.empty())
     {
       std::cout << "found an identifier: " << identifier << std::endl;
-      tokens.emplace_back(token{ identifier });
+      tokens.emplace_back(create_token_identifier(identifier));
     }
-    else if (!literal.empty())
+    else unless (constant.empty())
     {
-      std::cout << "found a constant: " << literal << std::endl;
-      tokens.emplace_back(token{ std::in_place_type_t<int>{}, std::stoi(literal) });
+      std::cout << "found a constant: " << constant << std::endl;
+      tokens.emplace_back(create_token_constant(std::stoi(constant)));
     }
-    else if (!op_2.empty())
+    else unless (op_2.empty())
     {
       std::cout << "found a 2-char operator: " << op_2 << std::endl;
-      tokens.emplace_back(token{ std::in_place_type_t<operation>{}, ::operation{operations[op_2]} });
+      tokens.emplace_back(create_token_operation(op_2));
     }
-    else if (!op_1.empty())
+    else unless (op_1.empty())
     {
       std::cout << "found a 1-char operator: " << op_1 << std::endl;
-      tokens.emplace_back(token{ std::in_place_type_t<operation>{}, operation{operations[op_1]} });
+      tokens.emplace_back(create_token_operation(op_1));
     }
-    else if (!punctuation.empty())
+    else unless (punc.empty())
     {
-      std::cout << "found punctuation: " << punctuation << std::endl;
-      tokens.emplace_back(token{ std::in_place_type_t<::punctuation>{}, ::punctuation{punctuation[0]} });
+      std::cout << "found punctuation: " << punc << std::endl;
+      tokens.emplace_back(create_token_punctuation(punc[0]));
     }
   }
   return tokens;
 }
 
-struct unary_op;
-
-struct constant
+token const& view_next(std::deque<token> const& tokens)
 {
-  int value;
+  return tokens.front();
+}
+
+void pop_next(std::deque<token>& tokens)
+{
+  tokens.pop_front();
+}
+
+token consume(std::deque<token>& tokens, token const& t)
+{
+  token const tok = view_next(tokens);
+  if (tok == t)
+  {
+    pop_next(tokens);
+    return tok;
+  }
+
+  // todo: error handling via optional (monad) here?
+  return {};
+}
+
+token consume_if_not(std::deque<token>& tokens, token::token_type t)
+{
+  token const tok = view_next(tokens);
+  if (tok.m_type != t)
+  {
+    pop_next(tokens);
+    return tok;
+  }
+
+  // todo: error handling via optional (monad) here?
+  return {};
+}
+
+#pragma endregion 
+
+// todo: memory allocator for AST and expression trees so we aren't calling new out the wazoo
+
+struct expression_node
+{
+  enum class expr_type
+  {
+    binary_op,
+    unary_op,
+    value,
+    // todo: add variable node type: just an index into symbol table
+  } m_type;
+  union
+  {
+    struct binop
+    {
+      operation_binary m_op_binary;
+      expression_node* m_lhs;
+      expression_node* m_rhs;
+    } m_binop;
+    struct unop
+    {
+      operation_unary op_unary;
+      expression_node* m_single;
+    } m_unop;
+    // todo: make atom a 64-bit unsigned and 64-bit float
+    union atom
+    {
+      int m_value;
+    } m_atom;
+  };
 };
 
-using expression = std::variant<unary_op*, constant*>;
+expression_node* parse_expression(std::deque<token>& tokens, int rbp = 0);
 
-struct unary_op
+// this OOP business is kind of silly.
+// maybe there should be no inheritance and simply a struct with lbp and fn pointers/lambdas.
+// unless virtual dispatch is actually more convenient than that.
+struct token_info_base
 {
-  operation op;
-  expression* exp;
+  virtual int lbp() { return 0; }
+  virtual expression_node* nud(std::deque<token>& tokens) = 0;
+  virtual expression_node* led(std::deque<token>& tokens, expression_node* left) = 0;
 };
 
-struct statement
+// todo: other literals (in separate definitions)
+struct token_info_constant : token_info_base
 {
-  // for now there are only return statements.
-  expression* m_expression;
+  token_info_constant(int i) : m_value{ i } {}
+  expression_node* nud(std::deque<token>& tokens) override
+  {
+    expression_node* expr_value = new expression_node{ expression_node::expr_type::value };
+    expr_value->m_atom.m_value = m_value;
+    return expr_value;
+  }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override { return nullptr; }
+  int m_value;
 };
 
-struct function
+struct token_info_plus : token_info_base
 {
-  // TODO: index into string pool
-  std::string m_name;
-  // for now, functions can have only one statement
-  statement* m_body;
+  int lbp() override { return 10; }
+  expression_node* nud(std::deque<token>& tokens) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    expression_node* expr_plus = new expression_node{ expression_node::expr_type::binary_op };
+    expr_plus->m_binop.m_lhs = left;
+    expr_plus->m_binop.m_op_binary = operation_binary::add;
+    expr_plus->m_binop.m_rhs = right;
+    return expr_plus;
+  }
 };
 
+int b = sizeof(token_info_plus);
+
+std::unordered_map<std::string_view, token_info_base*> op_token_info =
+{
+  {"+", new token_info_plus{}}
+};
+
+// todo: smart pointers.
+token_info_base* get_token_info(token const& t)
+{
+  switch (t.m_type)
+  {
+  case token::token_type::operation:
+    return op_token_info.at(t.m_operation);
+  case token::token_type::constant:
+    // todo: fix this trash
+    return new token_info_constant{ t.m_constant };
+  }
+
+  // something happened
+  return nullptr;
+}
+
+// https://eli.thegreenplace.net/2010/01/02/top-down-operator-precedence-parsing
+// read that ^
+expression_node* parse_expression(std::deque<token>& tokens, int rbp)
+{
+  token tok = consume_if_not(tokens, token::token_type::punctuation);
+  // todo: replace with optional-style error handling
+  if (tok.m_type == token::token_type::invalid)
+  {
+    // PARSE_ERROR: expected an expression.
+  }
+  token_info_base* tok_info = get_token_info(tok);
+
+  token tok_next = consume_if_not(tokens, token::token_type::punctuation);
+  // todo: replace with optional-style error handling
+  if (tok_next.m_type == token::token_type::invalid)
+  {
+    // tok is the last token in this expression
+
+    return tok_info->nud(tokens);
+  }
+  token_info_base* tok_info_next = get_token_info(tok_next);
+
+  expression_node* left = tok_info->nud(tokens);
+
+  while (rbp < tok_info_next->lbp())
+  {
+    tok = tok_next;
+    tok_info = tok_info_next;
+
+    left = tok_info->led(tokens, left);
+
+    tok_next = consume_if_not(tokens, token::token_type::punctuation);
+    // todo: replace with optional-style error handling
+    if (tok_next.m_type == token::token_type::invalid)
+    {
+      break;
+    }
+    tok_info_next = get_token_info(tok_next);
+  }
+
+  return left;
+}
+
+// statements are pieces of code that do things.
+// right now there is just a return statement.
+// todo: other kinds of statements
+struct statement_node
+{
+  expression_node* m_return_value;
+};
+
+statement_node* parse_statement(std::deque<token>& tokens)
+{
+  token const tok = view_next(tokens);
+
+  // return statement takes the form "return <expression>;"
+  if (tok.m_type == token::token_type::keyword)
+  {
+    if (tok.m_keyword.name == "return")
+    {
+      pop_next(tokens);
+
+      // parse the return statement's expression
+      expression_node* return_expr = parse_expression(tokens);
+
+      token const semicolon = view_next(tokens);
+      pop_next(tokens);
+      if (semicolon.m_type == token::token_type::punctuation
+       && semicolon.m_punctuation == ';')
+      {
+        return new statement_node{ return_expr };
+      }
+      else
+      {
+        // PARSE_ERROR: expected ';' after return statement
+      }
+    }
+  }
+
+  // todo: implement other statements
+
+  // this was not a statement?
+  return nullptr;
+}
+
+
+// a block (scope) is a list of statements and declarations.
+// todo: declarations, scoping, nested blocks.
+struct block_node
+{
+  std::deque<statement_node*> m_statements;
+};
+
+block_node* parse_block(std::deque<token>& tokens)
+{
+  {
+    token const open_bracket = view_next(tokens);
+    pop_next(tokens);
+    unless(open_bracket.m_type == token::token_type::punctuation
+           && open_bracket.m_punctuation == '{')
+    {
+      // PARSE_ERROR: expected block of code opened with '{'
+    }
+  }
+
+  block_node* b = new block_node{};
+
+  // parse all statements
+  while (statement_node* s = parse_statement(tokens))
+  {
+    b->m_statements.push_back(s);
+  }
+
+  // todo: parse declarations
+
+  // todo: parse nested blocks and enforce scoping rules
+
+  {
+    token const close_bracket = view_next(tokens);
+    pop_next(tokens);
+    unless(close_bracket.m_type == token::token_type::punctuation
+           && close_bracket.m_punctuation == '}')
+    {
+      // PARSE_ERROR: expected block of code opened with '}'
+    }
+  }
+
+  return b;
+}
+
+// a function is a callable block.
+// todo: replace with symbol table entry
+struct function_node
+{
+  std::string_view m_name;
+  block_node* m_block;
+};
+
+function_node* parse_function(std::string_view name, std::deque<token>& tokens)
+{
+  {
+    token const open_paren = view_next(tokens);
+    pop_next(tokens);
+    unless(open_paren.m_type == token::token_type::punctuation
+           && open_paren.m_punctuation == '(')
+    {
+      // no param list: ???
+    }
+  }
+
+  // todo: parse parameter list
+
+  {
+    token const close_paren = view_next(tokens);
+    pop_next(tokens);
+    unless(close_paren.m_type == token::token_type::punctuation
+           && close_paren.m_punctuation == ')')
+    {
+      // PARSE_ERROR: parameter list closed improperly
+    }
+  }
+
+  {
+    token const return_type_separator = view_next(tokens);
+    pop_next(tokens);
+    unless(return_type_separator.m_type == token::token_type::punctuation
+           && return_type_separator.m_punctuation == ':')
+    {
+      // PARSE_ERROR: no return type
+      // todo: allow missing return type (void)
+    }
+  }
+
+  {
+    token const return_type = view_next(tokens);
+    pop_next(tokens);
+    unless(return_type.m_type == token::token_type::keyword
+           && return_type.m_keyword.name == "int")
+    {
+      // PARSE_ERROR: return type must be int
+      // todo: type system
+    }
+  }
+
+  return new function_node{ name, parse_block(tokens) };
+}
+
+// a declaration is either a function or variable
+// todo: replace with symbol table entry
+struct declaration_node
+{
+  function_node* m_function;
+};
+
+declaration_node* parse_declaration(std::deque<token>& tokens)
+{
+
+  std::string_view name;
+  token const name_tok = view_next(tokens);
+  pop_next(tokens);
+  if (name_tok.m_type == token::token_type::identifier)
+  {
+    name = name_tok.m_identifier;
+  }
+  else
+  {
+    // PARSE_ERROR: expected name of function or variable
+  }
+
+  token const tok = view_next(tokens);
+  if (tok.m_type == token::token_type::punctuation
+      && tok.m_punctuation == '(')
+  {
+    // parse a function
+    return new declaration_node{ parse_function(name, tokens) };
+  }
+  // todo: parse a variable
+
+  return nullptr;
+}
+
+// a program is a list of declarations of functions and variables.
+// todo: replace with symbol table
 struct program
 {
-  // for now, programs can only have one function
-  function* m_entry_point;
+  std::deque<declaration_node*> m_declarations;
 };
-
-expression* parse_expression(std::deque<token>& tokens)
-{
-  token piece = tokens.front();
-  tokens.pop_front();
-  if (std::holds_alternative<int>(piece))
-  {
-    return new expression{new constant{std::get<int>(piece)}};
-  }
-  if (std::holds_alternative<operation>(piece))
-  {
-    return new expression{
-      new unary_op{
-      std::get<operation>(piece),
-      parse_expression(tokens)
-      }
-    };
-  }
-}
-
-statement* parse_statement(std::deque<token>& tokens)
-{
-  token ret = tokens.front();
-  tokens.pop_front();
-  if (std::get<keyword>(ret).name != "return")
-  {
-    std::cerr << "Error: Statement must take form 'return n;' where n is an integer literal.\n";
-  }
-
-  expression* e = parse_expression(tokens);
-
-  token terminator = tokens.front();
-  tokens.pop_front();
-  if (std::get<punctuation>(terminator) != ';')
-  {
-    std::cerr << "Error: Missing semicolon after statement.\n";
-  }
-
-  return new statement{e};
-}
-
-function* parse_function(std::deque<token>& tokens)
-{
-  function* f = new function;
-
-  {
-  token name = tokens.front();
-  tokens.pop_front();
-  f->m_name = std::get<std::string>(name);
-  }
-
-  {
-  token param_list_open = tokens.front();
-  tokens.pop_front();
-  if (std::get<punctuation>(param_list_open) != '(')
-  {
-    std::cerr << "Error: Missing parameter list after function name.\n";
-  }
-  }
-
-  // eventually parameters go here
-  {
-  token param_list_close = tokens.front();
-  tokens.pop_front();
-  if (std::get<punctuation>(param_list_close) != ')')
-  {
-    std::cerr << "Error: Unclosed parameter list after function name.\n";
-  }
-  }
-
-  {
-  token return_type_separator = tokens.front();
-  tokens.pop_front();
-  if (std::get<punctuation>(return_type_separator) != ':')
-  {
-    std::cerr << "Error: Unclosed parameter list after function name.\n";
-  }
-  }
-
-  {
-  token return_type = tokens.front();
-  tokens.pop_front();
-  if (std::get<keyword>(return_type).name != "int")
-  {
-    std::cerr << "Error: Only ints can be returned.\n";
-  }
-  }
-
-  {
-  token body_open = tokens.front();
-  tokens.pop_front();
-  if (std::get<punctuation>(body_open) != '{')
-  {
-    std::cerr << "Error: Missing '{' after function header.\n";
-  }
-  }
-
-  f->m_body = parse_statement(tokens);
-
-  {
-  token body_close = tokens.front();
-  tokens.pop_front();
-  if (std::get<punctuation>(body_close) != '}')
-  {
-    std::cerr << "Error: Missing '}' after function body.\n";
-  }
-  }
-
-  return f;
-}
 
 program* parse_program(std::deque<token>& tokens)
 {
   program* p = new program;
-  p->m_entry_point = parse_function(tokens);
 
-  if (!tokens.empty())
+  // parse all declarations
+  until (tokens.empty())
   {
-    // todo: remove once multiple functions allowed
-    std::cerr << "Error: Extra code after function declaration.\n";
+    p->m_declarations.push_back(parse_declaration(tokens));
   }
 
   return p;
-}
-
-int optimize_expression(expression& e)
-{
-  constexpr int is_constant = 1;
-  if (std::holds_alternative<constant*>(e))
-  {
-    return is_constant;
-  }
-  else if (std::holds_alternative<unary_op*>(e))
-  {
-    unary_op* op = std::get<unary_op*>(e);
-    if (optimize_expression(*(op->exp)) == is_constant)
-    {
-      switch (op->op)
-      {
-        //todo: don't leak memory
-      case operation::minus:
-      {
-        auto* prev_constant = std::get<constant*>(*(op->exp));
-        e.emplace<constant*>(new constant{ -(prev_constant->value) });
-        delete prev_constant;
-        return is_constant;
-      }
-      case operation::ones_complement:
-      {
-        auto* prev_constant = std::get<constant*>(*(op->exp));
-        e.emplace<constant*>(new constant{ ~(std::get<constant*>(*(op->exp)))->value });
-        delete prev_constant;
-        return is_constant;
-      }
-      case operation::boolean_negate:
-      {
-        auto* prev_constant = std::get<constant*>(*(op->exp));
-        e.emplace<constant*>(new constant{ !(std::get<constant*>(*(op->exp)))->value });
-        delete prev_constant;
-        return is_constant;
-      }
-      }
-    }
-  }
-  return !is_constant;
-}
-
-void optimize_statement(statement& s)
-{
-  optimize_expression(*s.m_expression);
-}
-
-void optimize_function(function& f)
-{
-  optimize_statement(*f.m_body);
-}
-
-void optimize_program(program& p)
-{
-  optimize_function(*p.m_entry_point);
-}
-
-void generate_expression(expression const& e, std::ostream& output);
-
-void generate_unary_op(unary_op const& u, std::ostream& output)
-{
-  generate_expression(*u.exp, output);
-  switch (u.op)
-  {
-  case minus:
-    output << "neg eax\n";
-    break;
-  case ones_complement:
-    output << "not eax\n";
-    break;
-  case boolean_negate:
-    output << "test eax, eax\n"; // test if eax is 0
-    output << "xor eax, eax\n";  // zero out eax
-    output << "setz al\n";       // set lowest byte of eax to 1 if it was 0 
-    break;
-  }
-}
-
-void generate_expression(expression const& e, std::ostream& output)
-{
-  if (std::holds_alternative<constant*>(e))
-  {
-    output << "mov eax, " << std::get<constant*>(e)->value << "\n";
-  }
-  else if (std::holds_alternative<unary_op*>(e))
-  {
-    generate_unary_op(*std::get<unary_op*>(e), output);
-  }
-}
-
-void generate_statement(statement const& s, std::ostream& output)
-{
-  generate_expression(*s.m_expression, output);
-  output << "ret\n";
-}
-
-void generate_function(function const& f, std::ostream& output)
-{
-  output << ".globl " << f.m_name << "\n";
-  output << f.m_name << ":\n";
-  generate_statement(*f.m_body, output);
-}
-
-void generate_program(program const& p, std::ostream& output)
-{
-  output << ".text\n";
-  output << ".intel_syntax noprefix\n";
-  generate_function(*p.m_entry_point, output);
 }
 
 int main(int argc, char** argv)
@@ -414,7 +616,6 @@ int main(int argc, char** argv)
   program* p = parse_program(tokens);
 
   // AST optimization
-  optimize_program(*p);
   
   // conversion into IR
 
@@ -422,7 +623,8 @@ int main(int argc, char** argv)
 
   // generate assembly output
   std::ofstream out_assembly{ "asm.s" };
-  generate_program(*p, out_assembly);
+
+  // todo: generic assembly interface for output to NASM or JIT
 
   return SUCCESS;
 }
