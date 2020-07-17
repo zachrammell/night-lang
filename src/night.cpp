@@ -6,8 +6,11 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <variant>
+#include <filesystem>
 
 #include <re2/re2.h>
+
+namespace fs = std::filesystem;
 
 constexpr int FAILURE = -1;
 constexpr int SUCCESS =  0;
@@ -385,16 +388,21 @@ int main(int argc, char** argv)
     return FAILURE;
   }
 
-  std::string input_filename { argv[1] };
-  std::ifstream input_file { input_filename };
-  
+  fs::path in_path{ argv[1] };
+  if (!fs::exists(in_path))
+  {
+    std::cerr << "Error: Input file " << in_path.generic_string() << " does not exist.\n";
+    return FAILURE;
+  }
+  std::ifstream input_file { in_path };
+
+  // tokenize input file
   std::deque<token> tokens;
   {
     std::string chunk;
     while (input_file >> chunk)
     {
-      auto&& tokenized = tokenize_chunk_regex(chunk);
-      //auto&& tokenized = tokenize_chunk(chunk);
+      auto const tokenized = tokenize_chunk(chunk);
       for (auto& token : tokenized)
       {
         tokens.emplace_back(token);
