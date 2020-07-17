@@ -1,5 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="token">
+    <DisplayString Condition="m_type == token::token_type::invalid"></DisplayString>
+    <DisplayString Condition="m_type == token::token_type::operation"> {m_operation} </DisplayString>
+    <DisplayString Condition="m_type == token::token_type::keyword"> {m_keyword} </DisplayString>
+    <DisplayString Condition="m_type == token::token_type::identifier"> {m_identifier} </DisplayString>
+    <DisplayString Condition="m_type == token::token_type::punctuation"> {m_punctuation} </DisplayString>
+    <DisplayString Condition="m_type == token::token_type::constant"> {m_constant} </DisplayString>
+    <Expand>
+      <Item Name="Type">m_type</Item>
+      <Item Condition="m_type == token::token_type::operation" Name="Value">m_operation</Item>
+      <Item Condition="m_type == token::token_type::keyword" Name="Value">m_keyword</Item>
+      <Item Condition="m_type == token::token_type::identifier" Name="Value">m_identifier</Item>
+      <Item Condition="m_type == token::token_type::punctuation" Name="Value">m_punctuation</Item>
+      <Item Condition="m_type == token::token_type::constant" Name="Value">m_constant</Item>
+    </Expand>
+  </Type>
   <Type Name="expression_node">
     <DisplayString Condition="m_type == expression_node::expr_type::binary_op"> {m_binop} </DisplayString>
     <DisplayString Condition="m_type == expression_node::expr_type::unary_op"> {m_unop} </DisplayString>
