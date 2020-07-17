@@ -67,7 +67,16 @@ int wmain(int argc, WCHAR** argv)
       out_exe_name = argv[i];
       continue;
     }
-    infile_paths.emplace_back(std::filesystem::path{ argv[i] }.generic_wstring());
+    fs::path infile{fs::current_path().append(argv[i])};
+    if (fs::exists(infile))
+    {
+      infile_paths.emplace_back(infile.generic_wstring());
+    }
+    else
+    {
+      std::wcerr << L"Error: File does not exist: " << infile.generic_wstring() << std::endl;
+      return EXIT_FAILURE;
+    }
   }
 
   {
