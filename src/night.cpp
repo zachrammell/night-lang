@@ -63,6 +63,7 @@ struct keyword
   std::string_view name;
 };
 
+// todo: include source file information in token (filename, line number, position)
 struct token
 {
   enum class token_type
@@ -157,6 +158,7 @@ std::deque<token> tokenize_chunk(std::string const& chunk)
   // todo: automatic regex builder for keywords, operators.
   std::stringstream capture_groups;
   // matches /* and */
+  // maybe just make it capture the entire comment and do away with nesting. who knows.
   capture_groups << "(?P<comment>" R"(\/\*|\*\/)" ")" << "|";
   capture_groups << "(?P<keyword>return|int)" << "|";
   capture_groups << "(?P<identifier>[[:alpha:]]+)" << "|";
@@ -178,7 +180,7 @@ std::deque<token> tokenize_chunk(std::string const& chunk)
   while(!input.empty()
     && RE2::Consume(&input, expr, &comment, &keyword, &identifier, &constant, &op_2, &op_1, &punc))
   {
-    // todo: do comments in a pre-pass? unless parsing them is useful for something
+    // todo: maybe do comments in a pre-pass? unless that's too slow or parsing them is useful for something
     if (!comment.empty())
     {
       if (comment == "/*")
@@ -187,6 +189,8 @@ std::deque<token> tokenize_chunk(std::string const& chunk)
       }
       else if (comment == "*/")
       {
+        // decrementing allows for nested comments.
+        // for C-like comment behavior, set depth to 0 here.
         --comment_depth;
       }
     }
@@ -303,6 +307,8 @@ struct expression_node
 
 expression_node* parse_expression(std::deque<token>& tokens, int rbp = 0);
 
+// todo: centralize binding powers (make an enum or table or something)
+
 // this OOP business is kind of silly.
 // maybe there should be no inheritance and simply a struct with lbp and fn pointers/lambdas.
 // unless virtual dispatch is actually more convenient than that.
@@ -317,36 +323,114 @@ struct token_info_base
 struct token_info_constant : token_info_base
 {
   token_info_constant(int i) : m_value{ i } {}
-  expression_node* nud(std::deque<token>& tokens) override
+  expression_node* nud(std::deque<token>&) override
   {
     expression_node* expr_value = new expression_node{ expression_node::expr_type::value };
     expr_value->m_atom.m_value = m_value;
     return expr_value;
   }
-  expression_node* led(std::deque<token>& tokens, expression_node* left) override { return nullptr; }
+  expression_node* led(std::deque<token>&, expression_node*) override { return nullptr; }
   int m_value;
 };
 
 struct token_info_plus : token_info_base
 {
   int lbp() override { return 10; }
-  expression_node* nud(std::deque<token>& tokens) override { return nullptr; }
+  expression_node* nud(std::deque<token>& tokens) override
+  {
+    return parse_expression(tokens, 100);
+  }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    expression_node* expr_add = new expression_node{ expression_node::expr_type::binary_op };
+    expr_add->m_binop.m_lhs = left;
+    expr_add->m_binop.m_op_binary = operation_binary::add;
+    expr_add->m_binop.m_rhs = right;
+    return expr_add;
+  }
+};
+
+struct token_info_minus : token_info_base
+{
+  int lbp() override { return 10; }
+  expression_node* nud(std::deque<token>& tokens) override
+  {
+    expression_node* expr_negate = new expression_node{ expression_node::expr_type::unary_op };
+    expr_negate->m_unop.op_unary = operation_unary::negate;
+    expr_negate->m_unop.m_single = parse_expression(tokens, 100);
+    return expr_negate;
+  }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    expression_node* expr_subtract = new expression_node{ expression_node::expr_type::binary_op };
+    expr_subtract->m_binop.m_lhs = left;
+    expr_subtract->m_binop.m_op_binary = operation_binary::subtract;
+    expr_subtract->m_binop.m_rhs = right;
+    return expr_subtract;
+  }
+};
+
+struct token_info_asterisk : token_info_base
+{
+  int lbp() override { return 20; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    expression_node* expr_multiply = new expression_node{ expression_node::expr_type::binary_op };
+    expr_multiply->m_binop.m_lhs = left;
+    expr_multiply->m_binop.m_op_binary = operation_binary::multiply;
+    expr_multiply->m_binop.m_rhs = right;
+    return expr_multiply;
+  }
+};
+
+struct token_info_slash : token_info_base
+{
+  int lbp() override { return 20; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    expression_node* expr_divide = new expression_node{ expression_node::expr_type::binary_op };
+    expr_divide->m_binop.m_lhs = left;
+    expr_divide->m_binop.m_op_binary = operation_binary::divide;
+    expr_divide->m_binop.m_rhs = right;
+    return expr_divide;
+  }
+};
+
+struct token_info_logical_and : token_info_base
+{
+  int lbp() override { return 20; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
   expression_node* led(std::deque<token>& tokens, expression_node* left) override
   {
     expression_node* right = parse_expression(tokens, lbp());
     expression_node* expr_plus = new expression_node{ expression_node::expr_type::binary_op };
     expr_plus->m_binop.m_lhs = left;
-    expr_plus->m_binop.m_op_binary = operation_binary::add;
+    expr_plus->m_binop.m_op_binary = operation_binary::divide;
     expr_plus->m_binop.m_rhs = right;
     return expr_plus;
   }
 };
 
-int b = sizeof(token_info_plus);
+struct token_info_expr_end : token_info_base
+{
+  int lbp() override { return 0; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>&, expression_node*) override { return nullptr; }
+};
 
 std::unordered_map<std::string_view, token_info_base*> op_token_info =
 {
-  {"+", new token_info_plus{}}
+  {"__expr_end", new token_info_expr_end{}},
+  {"+", new token_info_plus{}},
+  {"-", new token_info_minus{}},
+  {"*", new token_info_asterisk{}},
+  {"/", new token_info_slash{}}
 };
 
 // todo: smart pointers.
@@ -359,6 +443,11 @@ token_info_base* get_token_info(token const& t)
   case token::token_type::constant:
     // todo: fix this trash
     return new token_info_constant{ t.m_constant };
+  case token::token_type::punctuation:
+    if (t.m_punctuation == ';')
+    {
+      return op_token_info.at("__expr_end");
+    }
   }
 
   // something happened
@@ -369,40 +458,19 @@ token_info_base* get_token_info(token const& t)
 // read that ^
 expression_node* parse_expression(std::deque<token>& tokens, int rbp)
 {
-  token tok = consume_if_not(tokens, token::token_type::punctuation);
-  // todo: replace with optional-style error handling
-  if (tok.m_type == token::token_type::invalid)
-  {
-    // PARSE_ERROR: expected an expression.
-  }
+  token tok = view_next(tokens);
+  pop_next(tokens);
   token_info_base* tok_info = get_token_info(tok);
-
-  token tok_next = consume_if_not(tokens, token::token_type::punctuation);
-  // todo: replace with optional-style error handling
-  if (tok_next.m_type == token::token_type::invalid)
-  {
-    // tok is the last token in this expression
-
-    return tok_info->nud(tokens);
-  }
-  token_info_base* tok_info_next = get_token_info(tok_next);
 
   expression_node* left = tok_info->nud(tokens);
 
-  while (rbp < tok_info_next->lbp())
+  while (rbp < get_token_info(view_next(tokens))->lbp())
   {
-    tok = tok_next;
-    tok_info = tok_info_next;
+    tok = view_next(tokens);
+    pop_next(tokens);
+    tok_info = get_token_info(tok);
 
     left = tok_info->led(tokens, left);
-
-    tok_next = consume_if_not(tokens, token::token_type::punctuation);
-    // todo: replace with optional-style error handling
-    if (tok_next.m_type == token::token_type::invalid)
-    {
-      break;
-    }
-    tok_info_next = get_token_info(tok_next);
   }
 
   return left;
@@ -625,6 +693,7 @@ int main(int argc, char** argv)
   // tokenize input file
   std::deque<token> tokens;
   {
+    // todo: just read the whole file into memory at once.
     std::string chunk;
     while (input_file >> chunk)
     {
