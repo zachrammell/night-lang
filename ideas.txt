@@ -1,0 +1,40 @@
+-variable redeclaration even in sub-scopes is an error
+-no implicit copies
+
+main () : int
+{
+  x: int = 0;
+  y: int = 2;
+
+  //scope captures
+  [x] {
+    ++x; //ok
+    ++y; //error: variable "y" is not available in this scope
+  }
+}
+
+-range initialization
+// 0-3 is equivalent to 0,1,2,3
+// this outputs 0123
+for (i: int in [0-3])
+{
+  print(i);
+}
+
+-parameterized types
+// compile-time arguments to types
+
+-restricted enum (subset?)
+enum state
+{
+  A,
+  B,
+  C,
+  D
+};
+
+// compile-time guarantees for assignment
+current_state1: state[A-C] = D; // error: current_state1 can only be between A and C
+current_state2: state[A,C] = B; // error: current_state2 can only be A or C
+
+-nested functions
