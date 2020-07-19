@@ -1,0 +1,5 @@
+/* The simplest program in Night */
+main () : int
+{
+  return 0;
+}

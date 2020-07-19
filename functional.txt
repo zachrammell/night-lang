@@ -6,3 +6,8 @@
 (args) : return_type [captures] {...}  // capturing anonymous function (lambda)
 func (args) : return_type {...}        // function
 func (args) {...}                      // procedure
+
+
+Stateful functions have scope-local data that can persist between calls.
+Whenever a stateful function is used in a scope,
+that function's data persists through all subscopes until the original is closed.
