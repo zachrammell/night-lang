@@ -17,16 +17,20 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    - name: Checkout repository
+    - name: Checkout repository and all submodules
       uses: actions/checkout@v2
-
-    - name: Checkout submodules
-      uses: textbook/git-checkout-submodule-action@2.1.1
-
+      with:
+        submodules: "recursive"
+        
+    - name: Provide MSVC to action
+      uses: ilammy/msvc-dev-cmd@v1
 
     - name: run-cmake
+      env:
+        CC: cl.exe
+        CXX: cl.exe
       uses: lukka/run-cmake@v2.5
       with:
         cmakeListsOrSettingsJson: "CMakeSettingsJson"
-        configurationRegexFilter: "x64\\-Debug"
+        configurationRegexFilter: "^x64\\-Debug$"
 
