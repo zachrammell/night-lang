@@ -119,7 +119,7 @@ int wmain(int argc, WCHAR** argv)
 
   {
     std::wstringstream cli_golink;
-    cli_golink << L"GoLink /console /entry main ";
+    cli_golink << L"GoLink /console /entry __nightmain ";
     cli_golink << L"/fo " << std::filesystem::current_path().append(out_exe_name).generic_wstring() << L" ";
     cli_golink << L"kernel32.dll user32.dll gdi32.dll ";
     cli_golink << temp_obj_filename;

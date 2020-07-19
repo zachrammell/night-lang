@@ -775,12 +775,11 @@ std::ostream& generate_block(std::ostream& o, block_node const& b)
 std::ostream& generate_function(std::ostream& o, function_node const& f)
 {
   o << f.m_name << ":\n";
+
   generate_block(o, *(f.m_block));
-  // todo: replaceable entry point name
-  if (f.m_name == "main")
-  {
-    //o << "mov rcx, 0\n" << "call _ExitProcess@4\n";
-  }
+
+  o << "\n"; // readability
+
   return o;
 }
 
@@ -796,14 +795,24 @@ std::ostream& generate_program(std::ostream& o, program const& p)
   {
     o << "global " << decl->m_function->m_name << "\n";
   }
-
-  //o << "extern _ExitProcess@4\n";
+  o << "global __nightmain\n";
+  o << "extern _ExitProcess@4\n";
 
   o << "section .text\n"; 
   for (auto const decl : p.m_declarations)
   {
     generate_declaration(o, *decl);
   }
+
+  // the __nightmain function is the true entry point of all programs.
+  // later we can add language startup code here if needed
+  o << "__nightmain:\n";
+  o << "sub rsp, 40\n";
+  // todo: replaceable entry point name
+  o << "call main\n";
+  o << "add rsp, 40\n";
+  o << "mov rcx, rax\n";
+  o << "call _ExitProcess@4\n";
 
   return o;
 }
