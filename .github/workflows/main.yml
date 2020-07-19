@@ -32,5 +32,5 @@ jobs:
       uses: lukka/run-cmake@v2.5
       with:
         cmakeListsOrSettingsJson: "CMakeSettingsJson"
-        configurationRegexFilter: "x64\\-Debug"
+        configurationRegexFilter: "^x64\\-Debug$"
 
