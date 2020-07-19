@@ -17,13 +17,10 @@ jobs:
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    - name: Checkout repository
+    - name: Checkout repository and all submodules
       uses: actions/checkout@v2
-
-    - name: Checkout submodules
-      uses: srt32/git-actions@v0.0.3
       with:
-        args: git submodule update --init --recursive
+        submodules: "recursive"
 
     - name: run-cmake
       uses: lukka/run-cmake@v2.5
