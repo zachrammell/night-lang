@@ -25,12 +25,21 @@ jobs:
     - name: Provide MSVC to action
       uses: ilammy/msvc-dev-cmd@v1
 
-    - name: run-cmake
+    - name: Cache Build
+      id: cache-build
+      uses: actions/cache@v2
+      with:
+        path: out/build
+        key: ${{ runner.os }}-build
+
+    - name: Run CMake
+      id: run-cmake
       env:
         CC: cl.exe
         CXX: cl.exe
       uses: lukka/run-cmake@v2.5
       with:
+        buildDirectory: ${{ github.workspace }}/out/build/x64-Debug/
         cmakeListsOrSettingsJson: "CMakeSettingsJson"
         configurationRegexFilter: "^x64\\-Debug$"
 
