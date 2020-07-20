@@ -119,6 +119,8 @@ struct token_info_expr_end : token_info_base
   expression_node* led(std::deque<token>&, expression_node*) override { return nullptr; }
 };
 
+// todo: memory allocator for AST and expression trees so we aren't calling new out the wazoo
+
 std::unordered_map<std::string_view, token_info_base*> op_token_info =
 {
   {"__expr_end", new token_info_expr_end{}},
