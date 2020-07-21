@@ -33,7 +33,9 @@ extern std::unordered_set<std::string> const operators =
   "*",
   "/",
   "!",
-  "~"
+  "~",
+  "(",
+  ")"
 };
 
 int main(int argc, char** argv)

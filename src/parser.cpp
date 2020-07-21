@@ -249,8 +249,8 @@ function_node* parse_function(std::string_view name, std::deque<token>& tokens)
   {
     token const open_paren = view_next(tokens);
     pop_next(tokens);
-    if (!(open_paren.m_type == token::token_type::punctuation
-           && open_paren.m_punctuation == '('))
+    if (!(open_paren.m_type == token::token_type::operation
+           && open_paren.m_operation[0] == '('))
     {
       // no param list: ???
     }
@@ -261,8 +261,8 @@ function_node* parse_function(std::string_view name, std::deque<token>& tokens)
   {
     token const close_paren = view_next(tokens);
     pop_next(tokens);
-    if (!(close_paren.m_type == token::token_type::punctuation
-           && close_paren.m_punctuation == ')'))
+    if (!(close_paren.m_type == token::token_type::operation
+           && close_paren.m_operation[0] == ')'))
     {
       // PARSE_ERROR: parameter list closed improperly
     }
@@ -309,8 +309,8 @@ declaration_node* parse_declaration(std::deque<token>& tokens)
   }
 
   token const tok = view_next(tokens);
-  if (tok.m_type == token::token_type::punctuation
-      && tok.m_punctuation == '(')
+  if (tok.m_type == token::token_type::operation
+      && tok.m_operation[0] == '(')
   {
     // parse a function
     return new declaration_node{ parse_function(name, tokens) };

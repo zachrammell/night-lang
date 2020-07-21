@@ -87,8 +87,8 @@ std::deque<token> tokenize_chunk(std::string const& chunk)
   capture_groups << "(?P<identifier>[[:alpha:]]+)" << "|";
   capture_groups << "(?P<constant>[[:digit:]]+)" << "|";
   capture_groups << "(?P<operator_2char>" R"(&&|\|\|)" ")" << "|";
-  capture_groups << "(?P<operator_1char>" R"([~!\+\-\*\/])" ")" << "|";
-  capture_groups << "(?P<punctuation>[(){};:])"; // << "|";
+  capture_groups << "(?P<operator_1char>[" R"(~!\+\-\*\/)" "\\(\\)" "])" << "|";
+  capture_groups << "(?P<punctuation>[{};:])"; // << "|";
   re2::RE2 expr(capture_groups.str());
   std::string comment;
   std::string keyword;
