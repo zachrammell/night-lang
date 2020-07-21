@@ -119,11 +119,40 @@ struct token_info_expr_end : token_info_base
   expression_node* led(std::deque<token>&, expression_node*) override { return nullptr; }
 };
 
+struct token_info_lparen : token_info_base
+{
+  int lbp() override { return 0; }
+  expression_node* nud(std::deque<token>& tokens) override
+  {
+    expression_node* expr = parse_expression(tokens);
+    token const semicolon = view_next(tokens);
+    pop_next(tokens);
+    if (semicolon.m_type == token::token_type::operation
+        && semicolon.m_operation[0] == ')')
+    {
+      return expr;
+    }
+    // PARSE_ERROR: expected ')'
+    return nullptr;
+  }
+  // todo: as a binary operator, '(' is for function calls
+  expression_node* led(std::deque<token>&, expression_node*) override { return nullptr; }
+};
+
+struct token_info_rparen : token_info_base
+{
+  int lbp() override { return 0; }
+  expression_node* nud(std::deque<token>& tokens) override { return nullptr; }
+  expression_node* led(std::deque<token>&, expression_node*) override { return nullptr; }
+};
+
 // todo: memory allocator for AST and expression trees so we aren't calling new out the wazoo
 
 std::unordered_map<std::string_view, token_info_base*> op_token_info =
 {
   {"__expr_end", new token_info_expr_end{}},
+  {"(", new token_info_lparen{}},
+  {")", new token_info_rparen{}},
   {"+", new token_info_plus{}},
   {"-", new token_info_minus{}},
   {"*", new token_info_asterisk{}},
