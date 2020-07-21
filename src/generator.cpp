@@ -1,94 +1,66 @@
 #include <nightc/generator.hpp>
 
+#include <string>
+
+#include <nightc/codegen_x64.hpp>
+
 // todo: once IR is a thing, remove these generate_ functions.
 // these are really just here so that the "vertical slice" can stay intact
 
 // also,
 // todo: make a generic interface for asm that's more expressive than printing everything
 
-std::ostream& generate_expression(std::ostream& o, expression_node const& e)
+static r_id generate_expression_recursive(std::ostream& o, expression_node const& e)
 {
   switch (e.m_type)
   {
   case expression_node::expr_type::binary_op:
-    if (e.m_binop.m_op_binary == operation_binary::add
-        || e.m_binop.m_op_binary == operation_binary::multiply)
-    {
-      // generate_expression will output code that puts the result in rax
-      generate_expression(o, *(e.m_binop.m_lhs));
-      o << "push rax\n";
-      // the rhs will end up in rax
-      generate_expression(o, *(e.m_binop.m_rhs));
-      // put the lhs in rcx
-      o << "pop rcx\n";
-      // LHS: RCX
-      // RHS: RAX
-    }
-    if (e.m_binop.m_op_binary == operation_binary::subtract
-        || e.m_binop.m_op_binary == operation_binary::divide)
-    {
-      // generate_expression will output code that puts the result in rax
-      generate_expression(o, *(e.m_binop.m_lhs));
-      o << "push rax\n";
-      // the rhs will end up in rax
-      generate_expression(o, *(e.m_binop.m_rhs));
-      // put the rhs in rcx
-      o << "mov rcx, rax\n";
-      // put the lhs in rax
-      o << "pop rax\n";
-      // LHS: RAX
-      // RHS: RCX
-    }
-    // operate on rax and rcx, with result in rax.
+  {
+    r_id const r_left = generate_expression_recursive(o, *(e.m_binop.m_lhs));
+    r_id const r_right = generate_expression_recursive(o, *(e.m_binop.m_rhs));
     switch (e.m_binop.m_op_binary)
     {
     case operation_binary::add:
-      // lhs = 
-      o << "add rax, rcx\n";
-      break;
+      return gen_x64::add(o, r_left, r_right);
     case operation_binary::subtract:
-      // lhs = lhs - rhs
-      o << "sub rax, rcx\n";
-      break;
+      return gen_x64::sub(o, r_left, r_right);
     case operation_binary::multiply:
-      o << "imul rcx\n";
-      break;
+      return gen_x64::mul(o, r_left, r_right);
     case operation_binary::divide:
-      // rax / rcx
-      o << "xor rdx, rdx\n";
-      o << "idiv rcx\n";
-      break;
+      return gen_x64::div(o, r_left, r_right);
     }
+  }
     break;
   case expression_node::expr_type::unary_op:
-    generate_expression(o, *(e.m_unop.m_single));
-    // this can always operate on rax
+  {
+    r_id const r = generate_expression_recursive(o, *(e.m_unop.m_single));
     switch (e.m_unop.op_unary)
     {
     case operation_unary::negate:
-      o << "neg rax\n";
-      break;
+      return gen_x64::neg(o, r);
     case operation_unary::ones_complement:
-      o << "not rax\n";
-      break;
+      return gen_x64::not(o, r);
     case operation_unary::boolean_negate:
-      o << "test eax, eax\n"; // test if rax is 0
-      o << "xor rax, rax\n";  // zero out rax
-      o << "setz al\n";       // set lowest byte of rax to 1 if it was 0 
-      break;
+      return gen_x64::bool_neg(o, r);
     }
+  }
     break;
   case expression_node::expr_type::value:
-    o << "mov rax, " << e.m_atom.m_value << "\n";
-    break;
+    return gen_x64::load(o, e.m_atom.m_value);
   }
+}
+
+std::ostream& generate_expression(std::ostream& o, expression_node const& e)
+{
+  generate_expression_recursive(o, e);
   return o;
 }
 
 std::ostream& generate_statement(std::ostream& o, statement_node const& s)
 {
-  generate_expression(o, *(s.m_return_value));
-  o << "ret\n";
+  r_id const r1 = generate_expression_recursive(o, *(s.m_return_value));
+  gen_x64::mov(o, gen_x64::rax(), r1);
+  gen_x64::ret(o);
   return o;
 }
 

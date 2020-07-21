@@ -4,7 +4,7 @@ add_subdirectory(natvis)
 
 project(nightc)
 
-set(SOURCE_FILES night.cpp tokenizer.cpp parser.cpp generator.cpp)
+set(SOURCE_FILES "night.cpp" "tokenizer.cpp" "parser.cpp" "generator.cpp" "codegen_x64.cpp")
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${NIGHTC_NATVIS})
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
