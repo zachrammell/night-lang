@@ -28,6 +28,12 @@ extern std::unordered_set<std::string> const operators =
 {
   "&&",
   "||",
+  "==",
+  "!=",
+  "<=",
+  ">=",
+  "<",
+  ">",
   "+",
   "-",
   "*",
@@ -82,7 +88,7 @@ int main(int argc, char** argv)
   std::ofstream out_assembly{ "asm.s" };
   generate_program(out_assembly, *p);
   // print out for debugging purposes
-  generate_program(std::cout, *p);
+  generate_program(std::cerr, *p);
 
   return SUCCESS;
 }

@@ -50,6 +50,7 @@ token create_token_keyword(std::string const& keyword)
 token create_token_identifier(std::string const& id)
 {
   token t = token{ token::token_type::identifier };
+  // todo: symbol table
   auto stored_id = identifiers.find(id);
   if (stored_id == identifiers.end())
   {
@@ -86,8 +87,8 @@ std::deque<token> tokenize_chunk(std::string const& chunk)
   capture_groups << "(?P<keyword>return|int)" << "|";
   capture_groups << "(?P<identifier>[[:alpha:]]+)" << "|";
   capture_groups << "(?P<constant>[[:digit:]]+)" << "|";
-  capture_groups << "(?P<operator_2char>" R"(&&|\|\|)" ")" << "|";
-  capture_groups << "(?P<operator_1char>[" R"(~!\+\-\*\/)" "\\(\\)" "])" << "|";
+  capture_groups << "(?P<operator_2char>" R"(&&|\|\||==|!=|>=|<=)" ")" << "|";
+  capture_groups << "(?P<operator_1char>[" R"(~!\+\-\*\/<>)" "\\(\\)" "])" << "|";
   capture_groups << "(?P<punctuation>[{};:])"; // << "|";
   re2::RE2 expr(capture_groups.str());
   std::string comment;

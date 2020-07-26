@@ -5,17 +5,35 @@
 
 enum class operation_unary
 {
+  /* arithmetic */
   negate,
+
+  /* bitwise */
   ones_complement,
-  boolean_negate
+
+  /* logical */
+  logical_negate,
 };
 
 enum class operation_binary
 {
+  /* arithmetic */
   add,
   subtract,
   multiply,
-  divide
+  divide,
+
+  /* comparison */
+  equal,
+  not_equal,
+  more_or_equal,
+  less_or_equal,
+  more,
+  less,
+
+  /* logical */
+  logical_and,
+  logical_or,
 };
 
 struct expression_node

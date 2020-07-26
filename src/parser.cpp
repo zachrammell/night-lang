@@ -216,15 +216,34 @@ struct token_info_rparen : token_info_base
 
 // todo: memory allocator for AST and expression trees so we aren't calling new out the wazoo
 
-std::unordered_map<std::string_view, token_info_base*> op_token_info =
+static std::unordered_map<std::string_view, token_info_base*> op_token_info =
 {
   {"__expr_end", new token_info_expr_end{}},
+  /* grouping */
   {"(", new token_info_lparen{}},
   {")", new token_info_rparen{}},
+
+  /* arithmetic */
   {"+", new token_info_plus{}},
   {"-", new token_info_minus{}},
   {"*", new token_info_asterisk{}},
-  {"/", new token_info_slash{}}
+  {"/", new token_info_slash{}},
+
+  /* comparison */
+  {"==", new token_info_equal{}},
+  {"!=", new token_info_not_equal{}},
+  {">=", new token_info_more_or_equal{}},
+  {"<=", new token_info_less_or_equal{}},
+  {">",  new token_info_more{}},
+  {"<",  new token_info_less{}},
+
+  ///* logical */
+  //{"&&", new token_info_logical_and{}},
+  //{"||", new token_info_logical_or{}},
+  //{"!", new token_info_logical_negate{}},
+  //
+  ///* bitwise */
+  //{"~", new token_info_ones_complement{}},
 };
 
 // todo: smart pointers.

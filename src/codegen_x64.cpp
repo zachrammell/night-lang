@@ -3,6 +3,8 @@
 #include <array>
 #include <string>
 
+const register_id register_id::invalid = {-1};
+
 namespace gen_x64
 {
 
@@ -38,11 +40,13 @@ public:
     {
       // this is bad
       __debugbreak();
+      return;
     }
     if (registers[reg.value] != register_state::allocated)
     {
       // error trying to free register
       __debugbreak();
+      return;
     }
     registers[reg.value] = register_state::unallocated;
   }
@@ -84,12 +88,46 @@ r_id rax()
   return r_id{ register_allocator::rax };
 }
 
+
 r_id load(std::ostream& o, int value)
 {
   r_id const r = allocator.allocate_register();
-  o << "mov " << allocator.get_name(r) << ", " << value << "\n";
+  mov(o, r, value);
   return r;
 }
+
+void zero(std::ostream& o, r_id r1)
+{
+  // xor r1, r1
+  o << "xor " << allocator.get_name(r1) << ", " << allocator.get_name(r1) << "\n";
+}
+
+
+void mov(std::ostream& o, r_id r1, r_id r2)
+{
+  // mov r1, r2
+  o << "mov " << allocator.get_name(r1) << ", " << allocator.get_name(r2) << "\n";
+}
+
+void mov(std::ostream& o, r_id r1, int value)
+{
+  // mov r1, r2
+  o << "mov " << allocator.get_name(r1) << ", " << value << "\n";
+}
+
+void cmp(std::ostream& o, r_id r1, r_id r2)
+{
+  // cmp r1, r2
+  o << "cmp " << allocator.get_name(r1) << ", " << allocator.get_name(r2) << "\n";
+}
+
+void ret(std::ostream& o)
+{
+  allocator.deallocate_all_registers();
+  // ret
+  o << "ret\n";
+}
+
 
 r_id neg(std::ostream& o, r_id r1)
 {
@@ -113,10 +151,11 @@ r_id bool_neg(std::ostream& o, r_id r1)
   // xor r1, r1
   o << "xor " << r << ", " << r << "\n";  // zero out r1
   // setz r1
-  // todo: lowest byte only
-  o << "setz " << r << "\n";       // set lowest byte of r1 to 1 if it was 0
+  // todo: lookup name of low byte of r1
+  o << "setz " << r << "b\n";       // set lowest byte of r1 to 1 if it was 0
   return r1;
 }
+
 
 r_id add(std::ostream& o, r_id r1, r_id r2)
 {
@@ -156,18 +195,85 @@ r_id div(std::ostream& o, r_id r1, r_id r2)
   return r1;
 }
 
-r_id mov(std::ostream& o, r_id r1, r_id r2)
+
+static r_id compare_generic(std::ostream& o, r_id r1, r_id r2, std::string_view comparison_suffix)
 {
-  // mov r1, r2
-  o << "mov " << allocator.get_name(r1) << ", " << allocator.get_name(r2) << "\n";
+  cmp(o, r1, r2);
+  mov(o, r1, 0);
+  // todo: lookup name of low byte of r1
+  o << "set" << comparison_suffix << ' ' << allocator.get_name(r1) << "b\n";
+  allocator.deallocate_register(r2);
   return r1;
 }
 
-void ret(std::ostream& o)
+r_id eq(std::ostream& o, r_id r1, r_id r2)
 {
-  allocator.deallocate_all_registers();
-  // ret
-  o << "ret\n";
+  return compare_generic(o, r1, r2, "e");
 }
+
+r_id neq(std::ostream& o, r_id r1, r_id r2)
+{
+  return compare_generic(o, r1, r2, "ne");
+}
+
+r_id gt_eq(std::ostream& o, r_id r1, r_id r2)
+{
+  return compare_generic(o, r1, r2, "ge");
+}
+
+r_id lt_eq(std::ostream& o, r_id r1, r_id r2)
+{
+  return compare_generic(o, r1, r2, "le");
+}
+
+r_id gt(std::ostream& o, r_id r1, r_id r2)
+{
+  return compare_generic(o, r1, r2, "g");
+}
+
+r_id lt(std::ostream& o, r_id r1, r_id r2)
+{
+  return compare_generic(o, r1, r2, "l");
+}
+
+//r_id bool_and(std::ostream& o, r_id r1, r_id r2)
+//{
+//  std::string const labels[2] = { get_label_id(), get_label_id() };
+//  // test r1, r1
+//  o << "test " << allocator.get_name(r1) << ", " << allocator.get_name(r1) << "\n";
+//  // jne .L0
+//  o << "jne " << labels[0] << "\n";
+//  allocator.deallocate_register(r1);
+//  // jmp .L1
+//  o << "jmp " << labels[1];
+//  // .L0:
+//  o << labels[0] << ":\n";
+//  // will test, and deallocate r1
+//  compare_generic(o, r2, r1, "ne");
+//  // .L1:
+//  o << labels[1] << ":\n";
+//  return r2;
+//}
+//
+//r_id bool_or(std::ostream& o, r_id r1, r_id r2)
+//{
+//  std::string const labels[2] = { get_label_id(), get_label_id() };
+//  // test r1, r1
+//  o << "test " << allocator.get_name(r1) << ", " << allocator.get_name(r1) << "\n";
+//  // je .L0
+//  o << "je " << labels[0] << "\n";
+//  // mov r2, 1
+//  mov(o, r2, 1);
+//  allocator.deallocate_register(r1);
+//  // jmp .L1
+//  o << "jmp " << labels[1];
+//  // .L0:
+//  o << labels[0] << ":\n";
+//  // will test, and deallocate r1
+//  compare_generic(o, r2, r1, "ne");
+//  // .L1:
+//  o << labels[1] << ":\n";
+//  return r2;
+//}
 
 }
