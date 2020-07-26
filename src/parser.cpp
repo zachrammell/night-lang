@@ -14,6 +14,15 @@ struct token_info_base
   virtual expression_node* led(std::deque<token>& tokens, expression_node* left) = 0;
 };
 
+static expression_node* create_expr_binop(operation_binary op, expression_node* lhs, expression_node* rhs)
+{
+  expression_node* expr_multiply = new expression_node{ expression_node::expr_type::binary_op };
+  expr_multiply->m_binop.m_lhs = lhs;
+  expr_multiply->m_binop.m_op_binary = op;
+  expr_multiply->m_binop.m_rhs = rhs;
+  return expr_multiply;
+}
+
 // todo: other literals (in separate definitions)
 struct token_info_constant : token_info_base
 {
@@ -38,11 +47,7 @@ struct token_info_plus : token_info_base
   expression_node* led(std::deque<token>& tokens, expression_node* left) override
   {
     expression_node* right = parse_expression(tokens, lbp());
-    expression_node* expr_add = new expression_node{ expression_node::expr_type::binary_op };
-    expr_add->m_binop.m_lhs = left;
-    expr_add->m_binop.m_op_binary = operation_binary::add;
-    expr_add->m_binop.m_rhs = right;
-    return expr_add;
+    return create_expr_binop(operation_binary::add, left, right);
   }
 };
 
@@ -59,11 +64,7 @@ struct token_info_minus : token_info_base
   expression_node* led(std::deque<token>& tokens, expression_node* left) override
   {
     expression_node* right = parse_expression(tokens, lbp());
-    expression_node* expr_subtract = new expression_node{ expression_node::expr_type::binary_op };
-    expr_subtract->m_binop.m_lhs = left;
-    expr_subtract->m_binop.m_op_binary = operation_binary::subtract;
-    expr_subtract->m_binop.m_rhs = right;
-    return expr_subtract;
+    return create_expr_binop(operation_binary::subtract, left, right);
   }
 };
 
@@ -74,11 +75,7 @@ struct token_info_asterisk : token_info_base
   expression_node* led(std::deque<token>& tokens, expression_node* left) override
   {
     expression_node* right = parse_expression(tokens, lbp());
-    expression_node* expr_multiply = new expression_node{ expression_node::expr_type::binary_op };
-    expr_multiply->m_binop.m_lhs = left;
-    expr_multiply->m_binop.m_op_binary = operation_binary::multiply;
-    expr_multiply->m_binop.m_rhs = right;
-    return expr_multiply;
+    return create_expr_binop(operation_binary::multiply, left, right);
   }
 };
 
@@ -89,26 +86,97 @@ struct token_info_slash : token_info_base
   expression_node* led(std::deque<token>& tokens, expression_node* left) override
   {
     expression_node* right = parse_expression(tokens, lbp());
-    expression_node* expr_divide = new expression_node{ expression_node::expr_type::binary_op };
-    expr_divide->m_binop.m_lhs = left;
-    expr_divide->m_binop.m_op_binary = operation_binary::divide;
-    expr_divide->m_binop.m_rhs = right;
-    return expr_divide;
+    return create_expr_binop(operation_binary::divide, left, right);
   }
 };
 
-struct token_info_logical_and : token_info_base
+//struct token_info_logical_and : token_info_base
+//{
+//  int lbp() override { return 5; }
+//  expression_node* nud(std::deque<token>&) override { return nullptr; }
+//  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+//  {
+//    /* the - 1 causes right-associativity */
+//    expression_node* right = parse_expression(tokens, lbp() - 1);
+//    return create_expr_binop(operation_binary::logical_and, left, right);
+//  }
+//};
+//
+//struct token_info_logical_or : token_info_base
+//{
+//  int lbp() override { return 5; }
+//  expression_node* nud(std::deque<token>&) override { return nullptr; }
+//  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+//  {
+//    /* the - 1 causes right-associativity */
+//    expression_node* right = parse_expression(tokens, lbp() - 1);
+//    return create_expr_binop(operation_binary::logical_or, left, right);
+//  }
+//};
+
+struct token_info_equal : token_info_base
 {
-  int lbp() override { return 20; }
+  int lbp() override { return 30; }
   expression_node* nud(std::deque<token>&) override { return nullptr; }
   expression_node* led(std::deque<token>& tokens, expression_node* left) override
   {
     expression_node* right = parse_expression(tokens, lbp());
-    expression_node* expr_plus = new expression_node{ expression_node::expr_type::binary_op };
-    expr_plus->m_binop.m_lhs = left;
-    expr_plus->m_binop.m_op_binary = operation_binary::divide;
-    expr_plus->m_binop.m_rhs = right;
-    return expr_plus;
+    return create_expr_binop(operation_binary::equal, left, right);
+  }
+};
+
+struct token_info_not_equal : token_info_base
+{
+  int lbp() override { return 30; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    return create_expr_binop(operation_binary::not_equal, left, right);
+  }
+};
+
+struct token_info_more_or_equal : token_info_base
+{
+  int lbp() override { return 30; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    return create_expr_binop(operation_binary::more_or_equal, left, right);
+  }
+};
+
+struct token_info_less_or_equal : token_info_base
+{
+  int lbp() override { return 30; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    return create_expr_binop(operation_binary::less_or_equal, left, right);
+  }
+};
+
+struct token_info_more : token_info_base
+{
+  int lbp() override { return 30; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    return create_expr_binop(operation_binary::more, left, right);
+  }
+};
+
+struct token_info_less : token_info_base
+{
+  int lbp() override { return 30; }
+  expression_node* nud(std::deque<token>&) override { return nullptr; }
+  expression_node* led(std::deque<token>& tokens, expression_node* left) override
+  {
+    expression_node* right = parse_expression(tokens, lbp());
+    return create_expr_binop(operation_binary::less, left, right);
   }
 };
 
